@@ -1,0 +1,7 @@
+{
+  "name": "MedReport AI",
+  "description": "AI-powered medical consultant reporting system with voice dictation and automated formatting.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
