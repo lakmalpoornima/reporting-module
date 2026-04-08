@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Camera, MapPin, Phone, User, Save, Upload, ShieldCheck } from 'lucide-react';
 import { DoctorProfile } from '../types';
 

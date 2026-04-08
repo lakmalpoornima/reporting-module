@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Sparkles, FileText, User, ClipboardCheck, Eye, Loader2, Image as ImageIcon, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PatientData, ReportContent } from '../types';
@@ -24,12 +24,27 @@ export default function ReportForm({ onPreview, initialData }: ReportFormProps) 
   const [refinedContent, setRefinedContent] = useState<ReportContent | null>(initialData?.content || null);
   const [images, setImages] = useState<string[]>(initialData?.images || []);
   
+  const [fullEditableText, setFullEditableText] = useState('');
+  
   const [isListening, setIsListening] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (refinedContent) {
+      const text = [
+        `TECHNIQUE:\n${refinedContent.technique.map(t => `- ${t}`).join('\n')}`,
+        `CLINICAL FINDINGS:\n${refinedContent.clinicalFindings}`,
+        `DIAGNOSIS:\n${refinedContent.diagnosis}`,
+        `RECOMMENDATION:\n${refinedContent.recommendation}`,
+        `IMPRESSION:\n${refinedContent.impression}`
+      ].join('\n\n');
+      setFullEditableText(text);
+    }
+  }, [refinedContent]);
 
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -78,7 +93,7 @@ export default function ReportForm({ onPreview, initialData }: ReportFormProps) 
     if (!files) return;
 
     const remainingSlots = 2 - images.length;
-    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    const filesToProcess = (Array.from(files) as File[]).slice(0, remainingSlots);
 
     filesToProcess.forEach(file => {
       const reader = new FileReader();
@@ -102,6 +117,45 @@ export default function ReportForm({ onPreview, initialData }: ReportFormProps) 
       const newTechnique = [...refinedContent.technique];
       newTechnique[index] = value;
       setRefinedContent({ ...refinedContent, technique: newTechnique });
+    }
+  };
+
+  const parseFullText = (text: string): ReportContent => {
+    const sections: ReportContent = {
+      technique: [],
+      clinicalFindings: '',
+      diagnosis: '',
+      recommendation: '',
+      impression: ''
+    };
+
+    const techniqueMatch = text.match(/TECHNIQUE:([\s\S]*?)(?=CLINICAL FINDINGS:|$)/i);
+    if (techniqueMatch) {
+      sections.technique = techniqueMatch[1]
+        .split('\n')
+        .map(line => line.replace(/^-\s*/, '').trim())
+        .filter(line => line !== '');
+    }
+
+    const findingsMatch = text.match(/CLINICAL FINDINGS:([\s\S]*?)(?=DIAGNOSIS:|$)/i);
+    if (findingsMatch) sections.clinicalFindings = findingsMatch[1].trim();
+
+    const diagnosisMatch = text.match(/DIAGNOSIS:([\s\S]*?)(?=RECOMMENDATION:|$)/i);
+    if (diagnosisMatch) sections.diagnosis = diagnosisMatch[1].trim();
+
+    const recommendationMatch = text.match(/RECOMMENDATION:([\s\S]*?)(?=IMPRESSION:|$)/i);
+    if (recommendationMatch) sections.recommendation = recommendationMatch[1].trim();
+
+    const impressionMatch = text.match(/IMPRESSION:([\s\S]*?)$/i);
+    if (impressionMatch) sections.impression = impressionMatch[1].trim();
+
+    return sections;
+  };
+
+  const handlePreviewClick = () => {
+    if (fullEditableText) {
+      const parsed = parseFullText(fullEditableText);
+      onPreview(patient, parsed, images);
     }
   };
 
@@ -284,7 +338,7 @@ export default function ReportForm({ onPreview, initialData }: ReportFormProps) 
             </h2>
             {refinedContent && (
               <button
-                onClick={() => onPreview(patient, refinedContent, images)}
+                onClick={handlePreviewClick}
                 className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all"
               >
                 <Eye size={14} />
@@ -309,59 +363,16 @@ export default function ReportForm({ onPreview, initialData }: ReportFormProps) 
             )}
 
             {refinedContent && !isRefining && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Technique (MRI/CT Sequences)</label>
-                  <div className="space-y-2">
-                    {refinedContent.technique.map((tech, idx) => (
-                      <input
-                        key={idx}
-                        type="text"
-                        value={tech}
-                        onChange={e => updateTechnique(idx, e.target.value)}
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
-                      />
-                    ))}
-                    <button 
-                      onClick={() => setRefinedContent({...refinedContent, technique: [...refinedContent.technique, '']})}
-                      className="text-[10px] font-bold text-blue-600 hover:underline"
-                    >
-                      + Add Sequence
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Clinical Findings</label>
-                  <textarea
-                    value={refinedContent.clinicalFindings}
-                    onChange={e => updateRefinedField('clinicalFindings', e.target.value)}
-                    className="w-full h-32 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm leading-relaxed"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Diagnosis</label>
-                  <textarea
-                    value={refinedContent.diagnosis}
-                    onChange={e => updateRefinedField('diagnosis', e.target.value)}
-                    className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm leading-relaxed"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Recommendation</label>
-                  <textarea
-                    value={refinedContent.recommendation}
-                    onChange={e => updateRefinedField('recommendation', e.target.value)}
-                    className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm leading-relaxed"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Impression (Bolded Summary)</label>
-                  <textarea
-                    value={refinedContent.impression}
-                    onChange={e => updateRefinedField('impression', e.target.value)}
-                    className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm font-bold leading-relaxed"
-                  />
-                </div>
+              <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2">
+                <textarea
+                  value={fullEditableText}
+                  onChange={e => setFullEditableText(e.target.value)}
+                  className="flex-1 w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed font-mono custom-scrollbar"
+                  placeholder="Edit the full report here..."
+                />
+                <p className="mt-2 text-[10px] text-slate-400 font-medium italic">
+                  Tip: Keep the section headers (TECHNIQUE:, CLINICAL FINDINGS:, etc.) for proper formatting in the print preview.
+                </p>
               </div>
             )}
           </div>
